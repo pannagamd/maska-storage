@@ -1,0 +1,1 @@
+"""MaskaStorage — Embeddings Sub-package"""

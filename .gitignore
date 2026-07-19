@@ -1,0 +1,99 @@
+# ============================================================
+# MaskaStorage — .gitignore
+# ============================================================
+
+# ─── Python ──────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+wheels/
+*.egg-link
+pip-wheel-metadata/
+share/python-wheels/
+.installed.cfg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.local
+.env.development
+.env.staging
+.env.production
+
+# Ruff / MyPy / Pytest
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytest_cache/
+.cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+nosetests.xml
+test-results/
+
+# ─── Node / Frontend ─────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+.eslintcache
+.stylelintcache
+.parcel-cache/
+.next/
+out/
+.nuxt/
+dist/
+.cache/
+.temp/
+*.local
+
+# ─── IDE / Editors ────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Docker ──────────────────────────────────────────────
+*.env
+docker-compose.override.yml.local
+
+# ─── Data / Uploads (never commit raw data) ───────────────
+backend/app/data/uploads/*
+backend/app/data/processed/*
+backend/app/data/cache/*
+!backend/app/data/uploads/.gitkeep
+!backend/app/data/processed/.gitkeep
+!backend/app/data/cache/.gitkeep
+
+# ─── Logs ────────────────────────────────────────────────
+*.log
+logs/
+
+# ─── Secrets ─────────────────────────────────────────────
+*.pem
+*.key
+*.crt
+secrets/

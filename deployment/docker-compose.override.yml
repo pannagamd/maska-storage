@@ -1,0 +1,45 @@
+# ============================================================
+# MaskaStorage — docker-compose.override.yml
+# Development overrides (hot-reload, debug ports, etc.)
+# This file is automatically merged by docker-compose for local dev.
+# ============================================================
+version: "3.9"
+
+services:
+  backend:
+    # Override CMD to enable hot-reload in development
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+      --reload-dir /app/app
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      - APP_ENV=development
+    # Mount source code for hot-reload
+    volumes:
+      - ../backend/app:/app/app
+
+  frontend:
+    # Run Vite dev server instead of Nginx in development
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+    volumes:
+      - ../frontend/src:/app/src
+
+  db:
+    # Expose PostgreSQL port for direct local connections
+    ports:
+      - "5432:5432"
+
+  chromadb:
+    # Already exposed on 8001 in base compose
+    environment:
+      - ALLOW_RESET=TRUE

@@ -1,0 +1,1 @@
+"""MaskaStorage — Tests Package"""

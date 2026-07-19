@@ -1,0 +1,92 @@
+# ============================================================
+# MaskaStorage — docker-compose.yml
+# Production / base configuration
+# ============================================================
+version: "3.9"
+
+services:
+  # ─── Backend ─────────────────────────────────────────────
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ../deployment/Dockerfile
+    container_name: maska-backend
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+    env_file:
+      - ../backend/.env
+    volumes:
+      - uploads_data:/app/app/data/uploads
+      - processed_data:/app/app/data/processed
+      - cache_data:/app/app/data/cache
+    networks:
+      - maska_network
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ─── Frontend ─────────────────────────────────────────────
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: maska-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    networks:
+      - maska_network
+    depends_on:
+      - backend
+
+  # ─── Database ─────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: maska-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: maskadb
+      POSTGRES_USER: ${DB_USER:-maska}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - maska_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-maska} -d maskadb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ─── Vector Store (ChromaDB) ──────────────────────────────
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: maska-chromadb
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    networks:
+      - maska_network
+
+# ─── Named Volumes ────────────────────────────────────────
+volumes:
+  postgres_data:
+  chroma_data:
+  uploads_data:
+  processed_data:
+  cache_data:
+
+# ─── Networks ─────────────────────────────────────────────
+networks:
+  maska_network:
+    driver: bridge

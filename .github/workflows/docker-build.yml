@@ -1,0 +1,72 @@
+name: Docker Build Validation
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "deployment/Dockerfile"
+      - "deployment/docker-compose.yml"
+      - "frontend/Dockerfile"
+      - "backend/requirements.txt"
+      - ".github/workflows/docker-build.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "deployment/**"
+      - "frontend/Dockerfile"
+      - "backend/requirements.txt"
+
+jobs:
+  build-backend:
+    name: Build Backend Docker Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: backend
+          file: deployment/Dockerfile
+          push: false
+          tags: maska-backend:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-frontend:
+    name: Build Frontend Docker Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: frontend
+          file: frontend/Dockerfile
+          push: false
+          tags: maska-frontend:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  validate-compose:
+    name: Validate docker-compose.yml
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate docker-compose syntax
+        working-directory: deployment
+        run: docker compose config --quiet
