@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { listArchive, deleteArchiveItem } from "../services/archiveService";
-import type { ArchiveItem, PaginationParams } from "../types";
+import type { ArchiveItem } from "../types";
 
 interface UseArchiveState {
   items: ArchiveItem[];
