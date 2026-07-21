@@ -7,6 +7,9 @@ export async function uploadUrl(url) {
     return simulateUploadProcess(url)
   }
 
+  // Real mode placeholder contract:
+  // POST /api/upload with { url }
+  // Expected response: { title, summary, keyPoints }
   const res = await fetch('/api/upload', {
     method: 'POST',
     headers: {
@@ -34,6 +37,9 @@ export async function uploadFile(file) {
     formData.append('file', file)
   }
 
+  // Real mode placeholder contract:
+  // POST /api/upload with multipart/form-data containing file
+  // Expected response: { title, summary, keyPoints }
   const res = await fetch('/api/upload', {
     method: 'POST',
     body: formData,

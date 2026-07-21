@@ -12,6 +12,9 @@ export async function sendMessage(question) {
     }
   }
 
+  // Real mode placeholder contract:
+  // POST /api/chat with { question }
+  // Expected response: { answerChunks: string[], sources: [{ id, title, sourceType, sourceUrl }] }
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: {

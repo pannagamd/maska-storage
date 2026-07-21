@@ -9,6 +9,9 @@ export async function getItems() {
     return mockArchiveItems
   }
 
+  // Real mode placeholder contract:
+  // GET /api/archive
+  // Expected response: [{ id, title, summary, sourceType, sourceUrl, savedAt, keyPoints }, ...]
   const res = await fetch('/api/archive', {
     method: 'GET',
     headers: {
