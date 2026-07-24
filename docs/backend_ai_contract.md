@@ -65,27 +65,41 @@ The service layer will call the pipeline with:
 | `file_bytes` | `bytes \| None` | Raw PDF file content (for PDF uploads). `None` for URLs. |
 | `filename` | `str \| None` | Original PDF filename. `None` for URLs. |
 
-The exact function signature will be defined when wiring, but conceptually:
+**Chosen design: split functions (one per source type).**
+Pannaga will wire the service layer to call these two functions.
 
 ```python
-# This function lives in backend/app/ai (Sriganesh's code).
-# The service layer calls it.
+# backend/app/ai/<module>.py  (Sriganesh's code)
 
-def process_resource(
+def process_url(
     resource_id: str,
-    source_type: str,       # "url" or "pdf"
-    source_url: str | None,
-    file_bytes: bytes | None,
-    filename: str | None,
+    url: str,
 ) -> PipelineResult:
     """
-    Run the full AI pipeline: extract → clean → chunk → embed → summarize.
-    
-    Returns PipelineResult on success.
-    Raises PipelineExecutionError (or returns PipelineFailure) on failure.
+    Scrape the URL, extract and clean text, chunk, embed, and summarize.
+    Return PipelineResult on success.
+    Raise a domain exception (or return PipelineFailure) on failure.
+    """
+    ...
+
+def process_pdf(
+    resource_id: str,
+    filename: str,
+    file_bytes: bytes,
+) -> PipelineResult:
+    """
+    Parse raw PDF bytes, extract and clean text, chunk, embed, and summarize.
+    Return PipelineResult on success.
+    Raise a domain exception (or return PipelineFailure) on failure.
     """
     ...
 ```
+
+> **Decision locked (2026-07-24 by Pannaga):** Split functions chosen.
+> - URL uploads call `process_url(resource_id, url)`.
+> - PDF uploads call `process_pdf(resource_id, filename, file_bytes)`.
+> - The service layer (`upload_service.py`) will dispatch to the correct function based on `source_type`.
+
 
 ### Output on Success: `PipelineResult`
 
@@ -235,10 +249,14 @@ PipelineResult received
 
 ## Open Questions for Team Alignment
 
-1. **Embedding model & dimension:** Which model will Sriganesh use? The `embedding` field is `list[float]` — Yeshneil needs to know the dimension for ChromaDB collection setup.
-2. **Chunk size strategy:** What chunk size / overlap will the pipeline use? This affects retrieval quality.
-3. **Sync vs async:** Should `process_resource()` be sync or async? The service layer can handle either via `BackgroundTasks` or `asyncio.to_thread()`.
-4. **LLM provider:** Which LLM for summarization? The `llm_api_key` config field is ready but provider-agnostic.
+> These must be resolved before Pannaga wires the real pipeline call in `upload_service.py`.
+
+0. ~~**Function signature design:** RESOLVED — split functions chosen (`process_url` / `process_pdf`).~~
+1. **Embedding model & dimension:** Which model will Sriganesh use? The `embedding` field is `list[float]` — Yeshneil needs to know the exact dimension for ChromaDB collection setup before vectors can be stored.
+2. **Chunk size & overlap strategy:** What chunk size / overlap will the pipeline use? This affects retrieval quality and must be agreed with Yeshneil.
+3. **Sync vs async:** Should `process_url` / `process_pdf` be sync or `async`? The service layer can handle either via `BackgroundTasks` (sync) or `asyncio.to_thread()` (sync-in-thread). If the pipeline uses async HTTP clients or async model APIs, declare them `async`.
+4. **LLM provider:** Which LLM for summarization? The `llm_api_key` config field is ready but provider-agnostic. Sriganesh should confirm the provider so the right key name is used.
+5. **`PipelineFailure` vs exception:** Should the pipeline return a `PipelineFailure` object or raise a domain exception? Either works — the service layer handles both — but pick one pattern for consistency.
 
 ---
 

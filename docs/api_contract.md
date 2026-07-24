@@ -4,6 +4,12 @@
 **Last Updated:** 2026-07-23
 **Status:** Stable — frontend may build against these shapes.
 
+> **Datetime format note:** All `datetime` fields are serialized as ISO 8601 strings
+> **without a timezone suffix** (e.g. `"2026-07-23T14:05:18.951069"`), not `"...Z"`.
+> All timestamps are stored and returned as UTC. The absence of `Z` is a known
+> SQLAlchemy/Pydantic v2 behaviour with naive datetimes. Treat all returned
+> datetime strings as UTC when parsing on the frontend.
+
 ---
 
 ## Architecture Boundary Reminder
@@ -219,10 +225,11 @@ Send **exactly one** of the two form fields:
 | `file` | `file` (binary form field) | One of `url` / `file` | Must have MIME type `application/pdf` |
 
 > **Validation rules (enforced by the backend):**
-> - Sending both `url` and `file` → `400 Bad Request`, `code: "validation_error"`
+> - Sending both `url` and `file` as valid multipart fields → `400 Bad Request`, `code: "validation_error"`
 > - Sending neither → `400 Bad Request`, `code: "validation_error"`
 > - `url` is not a valid HTTP/HTTPS URL → `400 Bad Request`, `code: "validation_error"`
 > - `file` MIME type is not `application/pdf` → `415 Unsupported Media Type`, `code: "unsupported_type"`
+> - `file` field sent as a plain string (not a real multipart file) → `422 Unprocessable Content`, `code: "validation_error"` (Pydantic type mismatch)
 
 ##### Example — URL upload
 ```bash
@@ -245,7 +252,7 @@ curl -X POST http://localhost:8000/upload \
   "source_type": "url",
   "title": null,
   "summary": null,
-  "created_at": "2026-07-21T14:30:00Z"
+  "created_at": "2026-07-23T14:05:18.951069"
 }
 ```
 
@@ -256,7 +263,7 @@ curl -X POST http://localhost:8000/upload \
 | `source_type` | `string` | No | `"url"` or `"pdf"` |
 | `title` | `string or null` | Yes | `null` at upload time for URL uploads. Set to the original filename for PDF uploads (provisional — will be overwritten by AI extraction). |
 | `summary` | `string or null` | Yes | Always `null` at upload time. Populated once the AI pipeline completes summarization. |
-| `created_at` | `string` (ISO 8601) | No | UTC timestamp of when the resource record was created. |
+| `created_at` | `string` (ISO 8601, **no timezone suffix**) | No | UTC timestamp of when the resource record was created. Example: `"2026-07-23T14:05:18.951069"` |
 
 > **Status lifecycle:** `processing` → `ready` (success) or `failed` (pipeline error).
 > Poll `GET /archive/{resource_id}` until status is `"ready"` or `"failed"` (both are terminal).
@@ -356,13 +363,13 @@ Returns a paginated list of all ingested resources from SQLite. Supports filteri
 {
   "items": [
     {
-      "id": "res_seed_000000000000000001",
-      "title": "Example Article Title",
+      "id": "res_seed_000000000000000003",
+      "title": "Private Page (failed)",
       "source_type": "url",
-      "status": "ready",
-      "summary": "A concise AI-generated summary of the resource content.",
-      "created_at": "2026-07-21T14:30:00Z",
-      "updated_at": "2026-07-21T14:32:45Z"
+      "status": "failed",
+      "summary": null,
+      "created_at": "2026-07-23T14:04:21.835396",
+      "updated_at": "2026-07-23T14:04:21.876312"
     },
     {
       "id": "res_seed_000000000000000002",
@@ -370,11 +377,20 @@ Returns a paginated list of all ingested resources from SQLite. Supports filteri
       "source_type": "pdf",
       "status": "processing",
       "summary": null,
-      "created_at": "2026-07-21T14:35:00Z",
-      "updated_at": "2026-07-21T14:35:00Z"
+      "created_at": "2026-07-23T14:04:21.835396",
+      "updated_at": "2026-07-23T14:04:21.835396"
+    },
+    {
+      "id": "res_seed_000000000000000001",
+      "title": "Example Article Title",
+      "source_type": "url",
+      "status": "ready",
+      "summary": "A concise AI-generated summary of the resource content.",
+      "created_at": "2026-07-23T14:04:21.835396",
+      "updated_at": "2026-07-23T14:04:21.835396"
     }
   ],
-  "total": 2,
+  "total": 3,
   "page": 1,
   "page_size": 20
 }
@@ -388,8 +404,8 @@ Returns a paginated list of all ingested resources from SQLite. Supports filteri
 | `items[].source_type` | `string` | No | `"url"` or `"pdf"` |
 | `items[].status` | `string` | No | `"pending"`, `"processing"`, `"ready"`, or `"failed"` |
 | `items[].summary` | `string or null` | Yes | AI-generated summary; `null` while processing |
-| `items[].created_at` | `string` (ISO 8601) | No | UTC creation timestamp |
-| `items[].updated_at` | `string` (ISO 8601) | No | UTC last-updated timestamp |
+| `items[].created_at` | `string` (ISO 8601, no `Z`) | No | UTC creation timestamp |
+| `items[].updated_at` | `string` (ISO 8601, no `Z`) | No | UTC last-updated timestamp |
 | `total` | `integer` | No | Total matching resources across all pages (for pagination controls) |
 | `page` | `integer` | No | Current page number |
 | `page_size` | `integer` | No | Items per page used for this response |
@@ -428,7 +444,9 @@ Returns a paginated list of all ingested resources from SQLite. Supports filteri
 #### Frontend Notes
 - An empty `items` array with `total: 0` is a valid success response — render an empty state, not an error.
 - Use `total`, `page`, and `page_size` to build pagination controls.
-- The list view does **not** include `source_url` — fetch `GET /archive/{resource_id}` for full detail.
+- The list view (`GET /archive`) does **not** include detail-only fields: `source_url`, `filename`, `error_message`, or `completed_at`. Fetch `GET /archive/{resource_id}` for the full detail.
+- Items with `status: "failed"` remain visible in the list — they are not automatically hidden. The frontend may choose to show them with a failure indicator.
+- Results are ordered newest-first by `created_at`.
 
 ---
 
@@ -455,9 +473,9 @@ Fetches the full detail record for a single resource. Use this to poll for statu
   "status": "ready",
   "summary": "A concise AI-generated summary of the resource content.",
   "error_message": null,
-  "created_at": "2026-07-21T14:30:00Z",
-  "updated_at": "2026-07-21T14:32:45Z",
-  "completed_at": "2026-07-21T14:32:45Z"
+  "created_at": "2026-07-23T14:04:21.835396",
+  "updated_at": "2026-07-23T14:04:21.880170",
+  "completed_at": "2026-07-23T14:04:21.835376"
 }
 ```
 
@@ -472,9 +490,9 @@ Fetches the full detail record for a single resource. Use this to poll for statu
   "status": "failed",
   "summary": null,
   "error_message": "Invalid or unreachable URL: the page returned HTTP 403.",
-  "created_at": "2026-07-23T08:20:30Z",
-  "updated_at": "2026-07-23T08:20:30Z",
-  "completed_at": "2026-07-23T08:20:30Z"
+  "created_at": "2026-07-23T14:04:21.835396",
+  "updated_at": "2026-07-23T14:04:21.876312",
+  "completed_at": "2026-07-23T14:04:21.835376"
 }
 ```
 
@@ -488,9 +506,9 @@ Fetches the full detail record for a single resource. Use this to poll for statu
 | `status` | `string` | No | `"pending"`, `"processing"`, `"ready"`, or `"failed"` |
 | `summary` | `string or null` | Yes | AI-generated summary; `null` while processing or if generation failed |
 | `error_message` | `string or null` | Yes | Human-readable failure reason. Non-null **only** when `status == "failed"`. Safe to display in the UI. |
-| `created_at` | `string` (ISO 8601) | No | UTC creation timestamp |
-| `updated_at` | `string` (ISO 8601) | No | UTC last-updated timestamp |
-| `completed_at` | `string or null` (ISO 8601) | Yes | UTC timestamp when the pipeline finished (`"ready"` or `"failed"`). `null` while `"pending"` or `"processing"`. |
+| `created_at` | `string` (ISO 8601, no `Z`) | No | UTC creation timestamp |
+| `updated_at` | `string` (ISO 8601, no `Z`) | No | UTC last-updated timestamp |
+| `completed_at` | `string or null` (ISO 8601, no `Z`) | Yes | UTC timestamp when the pipeline finished (`"ready"` or `"failed"`). `null` while `"pending"` or `"processing"`. |
 
 > **Note:** `source_url`, `filename`, `error_message`, and `completed_at` are only present in the detail response, not in the list response (`GET /archive`).
 
@@ -724,8 +742,11 @@ All field names follow `snake_case` to match the Pydantic models in `backend/app
 | `source_type` | `source_type` | Enum: `"url"` or `"pdf"` |
 | `status` | `status` | Enum: `"pending"`, `"processing"`, `"ready"`, `"failed"` |
 | `source_url` | `source_url` | Only in `ArchiveItemDetail` (detail view); `null` for PDF uploads |
-| `created_at` | `created_at` | ISO 8601 UTC datetime string |
-| `updated_at` | `updated_at` | ISO 8601 UTC datetime string |
+| `filename` | `filename` | Only in `ArchiveItemDetail` (detail view); `null` for URL uploads |
+| `error_message` | `error_message` | Only in `ArchiveItemDetail` (detail view); `null` unless `status=="failed"` |
+| `completed_at` | `completed_at` | Only in `ArchiveItemDetail` (detail view); `null` while pending/processing |
+| `created_at` | `created_at` | ISO 8601 UTC datetime, **no `Z` suffix**, microseconds present |
+| `updated_at` | `updated_at` | ISO 8601 UTC datetime, **no `Z` suffix**, microseconds present |
 | `resource_ids_used` | `resource_ids_used` | `ChatResponse` only; list of strings, may be empty |
 
 > **Note on `id` vs `resource_id`:** Upload and chat responses use `resource_id` as the key. Archive list and detail responses use `id` as the key. Both refer to the same identifier — this is a known inconsistency that will be resolved in a future schema cleanup.

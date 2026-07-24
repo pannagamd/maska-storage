@@ -271,6 +271,115 @@ def update_resource_status(
     return resource
 
 
+def mark_resource_ready(
+    db: Session,
+    resource_id: str,
+    *,
+    title: str | None = None,
+    summary: str | None = None,
+) -> Resource | None:
+    """
+    Mark a resource as successfully processed (status = "ready").
+
+    Convenience wrapper around ``update_resource_status`` for the common
+    success path. Sets:
+      - ``status`` = "ready"
+      - ``title`` if provided (overwrites provisional title set at upload time)
+      - ``summary`` if provided
+      - ``error_message`` = None  (clears any prior failure message)
+      - ``completed_at`` = current UTC time
+      - ``updated_at`` = current UTC time
+
+    Called by the service layer after the AI pipeline returns a
+    ``PipelineResult`` successfully.
+
+    Parameters
+    ----------
+    db:
+        Active SQLAlchemy session.
+    resource_id:
+        Primary key of the resource to mark ready.
+    title:
+        AI-extracted document title. Pass ``None`` to leave unchanged.
+    summary:
+        AI-generated summary. Pass ``None`` to leave unchanged.
+
+    Returns
+    -------
+    Resource | None
+        Updated ORM instance, or ``None`` if resource_id was not found.
+    """
+    resource = db.get(Resource, resource_id)
+    if resource is None:
+        return None
+
+    now = _utcnow()
+    resource.status = "ready"
+    resource.updated_at = now
+    resource.completed_at = now
+    resource.error_message = None  # clear any prior failure
+
+    if title is not None:
+        resource.title = title
+    if summary is not None:
+        resource.summary = summary
+
+    db.commit()
+    db.refresh(resource)
+    return resource
+
+
+def mark_resource_failed(
+    db: Session,
+    resource_id: str,
+    *,
+    error_message: str,
+) -> Resource | None:
+    """
+    Mark a resource as failed (status = "failed") with a safe error message.
+
+    Convenience wrapper around ``update_resource_status`` for the failure path.
+    Sets:
+      - ``status`` = "failed"
+      - ``error_message`` = provided message (must be safe for UI display —
+        no API keys, no raw stack traces, no file contents)
+      - ``completed_at`` = current UTC time
+      - ``updated_at`` = current UTC time
+
+    Called by the service layer when it catches a pipeline exception during
+    background processing. The frontend polls ``GET /archive/{resource_id}``
+    and displays ``error_message`` to the user on failure.
+
+    Parameters
+    ----------
+    db:
+        Active SQLAlchemy session.
+    resource_id:
+        Primary key of the resource to mark failed.
+    error_message:
+        Human-readable failure reason. Safe to surface in the frontend UI.
+        Must not contain secrets, API keys, or raw stack traces.
+
+    Returns
+    -------
+    Resource | None
+        Updated ORM instance, or ``None`` if resource_id was not found.
+    """
+    resource = db.get(Resource, resource_id)
+    if resource is None:
+        return None
+
+    now = _utcnow()
+    resource.status = "failed"
+    resource.updated_at = now
+    resource.completed_at = now
+    resource.error_message = error_message
+
+    db.commit()
+    db.refresh(resource)
+    return resource
+
+
 # ---------------------------------------------------------------------------
 # Delete
 # ---------------------------------------------------------------------------

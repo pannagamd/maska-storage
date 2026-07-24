@@ -73,34 +73,41 @@ def _run_background_processing(
         When Sriganesh's pipeline is ready, replace the placeholder body
         with the real pipeline call.
 
-    Integration (when ready)::
+    Integration (when ready — see docs/backend_ai_contract.md)::
 
-        from app.ai.pipeline import process_resource  # Sriganesh's code
         from app.database.session import SessionLocal
 
         db = SessionLocal()
         try:
-            result = process_resource(
-                resource_id=resource_id,
-                source_type=source_type,
-                source_url=source_url,
-                file_bytes=file_bytes,
-                filename=filename,
-            )
-            # On success: update resource to "ready" with title/summary
-            crud.update_resource_status(
+            if source_type == "url":
+                from app.ai.<module> import process_url  # Sriganesh's code
+                result = process_url(resource_id=resource_id, url=source_url)
+            else:
+                from app.ai.<module> import process_pdf  # Sriganesh's code
+                result = process_pdf(
+                    resource_id=resource_id,
+                    filename=filename,
+                    file_bytes=file_bytes,
+                )
+            # On success: mark resource ready with extracted metadata
+            crud.mark_resource_ready(
                 db, resource_id,
-                status="ready",
                 title=result.metadata.title,
                 summary=result.metadata.summary,
             )
-            # Hand off chunks to Yeshneil's retrieval layer
-            # retrieval.store_chunks(result.chunks)
+            logger.info(
+                "Resource marked ready: resource_id=%s chunks=%d",
+                resource_id, len(result.chunks),
+            )
+            # Hand off chunks to Yeshneil's retrieval layer:
+            # retrieval.store_chunks(result.chunks)  -- Yeshneil's module
         except Exception as exc:
-            crud.update_resource_status(
-                db, resource_id,
-                status="failed",
-                error_message=str(exc),
+            # On failure: mark resource as failed with a safe message
+            safe_msg = str(exc)  # ensure no raw secrets in exc.args
+            crud.mark_resource_failed(db, resource_id, error_message=safe_msg)
+            logger.error(
+                "Resource marked failed: resource_id=%s reason=%s",
+                resource_id, safe_msg,
             )
         finally:
             db.close()
@@ -120,15 +127,21 @@ def _run_background_processing(
     """
     # --- PLACEHOLDER: log intent, do not process ---
     logger.info(
-        "Background processing scheduled for resource_id=%s source_type=%s "
-        "(AI pipeline not yet wired — resource will remain in 'processing' status)",
+        "Background processing started: resource_id=%s source_type=%s "
+        "(AI pipeline not yet wired — resource will remain status=processing)",
         resource_id,
         source_type,
     )
 
+    # Safety net: if this placeholder ever raises unexpectedly, log it
+    # so it does not silently disappear into FastAPI BackgroundTasks.
+    # When the real pipeline is wired, the try/except in the integration
+    # example above replaces this block entirely.
+
     # TODO(pannaga + sriganesh): replace the log above with the real
-    # pipeline call once backend/app/ai is ready. See integration
-    # example in the docstring above and docs/backend_ai_contract.md.
+    # pipeline call once backend/app/ai is ready. Dispatch to
+    # process_url() for source_type="url" or process_pdf() for "pdf".
+    # See integration example in the docstring above and docs/backend_ai_contract.md.
 
 
 def _schedule_processing(
@@ -191,6 +204,10 @@ def create_url_upload(
         GET /archive/{resource_id} until status is ``ready``.
     """
     resource_id = _new_resource_id()
+    logger.info(
+        "Upload received: source_type=url url=%s",
+        url,
+    )
 
     resource = crud.create_resource(
         db,
@@ -252,6 +269,11 @@ def create_pdf_upload(
         Immediately returned 202 payload. Status is ``processing``.
     """
     resource_id = _new_resource_id()
+    logger.info(
+        "Upload received: source_type=pdf filename=%s file_size_bytes=%d",
+        filename or "<unnamed>",
+        len(file_bytes),
+    )
 
     resource = crud.create_resource(
         db,
