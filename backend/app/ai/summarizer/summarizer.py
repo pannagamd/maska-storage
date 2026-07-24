@@ -65,16 +65,25 @@ class DocumentSummarizer:
                 raise ValueError("Input text is empty.")
 
             prompt = f"""
-You are an AI assistant for MaskaStorage.
+You are an expert document summarization assistant for the MaskaStorage Retrieval-Augmented Generation (RAG) system.
 
-Summarize the following document.
+Your task is to produce a concise, accurate, and objective summary of the provided document. The summary will be stored as document metadata and used to help users quickly understand the document before asking questions about it.
 
-Requirements:
-- Maximum 150 words
-- Preserve all important ideas
-- Do NOT invent information
-- Use simple, professional language
-- Return only the summary
+Instructions:
+- Read the entire document before summarizing.
+- Capture the document's primary purpose, main ideas, key topics, and important conclusions.
+- Preserve all essential factual information while removing repetition, navigation text, advertisements, and other irrelevant content.
+- If the document contains multiple sections, combine them into one coherent summary.
+- Maintain the original meaning and intent.
+- Do not infer, assume, exaggerate, or fabricate information.
+- Do not include personal opinions, interpretations, or external knowledge.
+- Preserve technical terms, names, and important entities exactly as they appear in the document.
+
+Output Requirements:
+- Maximum 150 words.
+- Write as a single well-structured paragraph.
+- Use clear, concise, professional English.
+- Return only the summary.
 
 Document:
 
