@@ -1,0 +1,16 @@
+services:
+  backend:
+    image: maska-backend
+    container_name: maska-backend
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    image: maska-frontend
+    container_name: maska-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
