@@ -11,8 +11,13 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements first for better caching
 COPY backend/requirements.txt .
 
-RUN pip install --no-cache-dir -r requirements.txt
+# Install CPU-only PyTorch first
+RUN pip install --no-cache-dir \
+    --index-url https://download.pytorch.org/whl/cpu \
+    torch torchvision torchaudio
 
+# Install remaining dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend source
 COPY backend/ ./backend/
 
